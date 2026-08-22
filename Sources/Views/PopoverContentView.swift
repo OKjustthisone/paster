@@ -139,16 +139,10 @@ public struct PopoverContentView: View {
                             }
                         )
                         .id(item.id)
-
-                        if index < filteredItems.count - 1 {
-                            Divider()
-                                .padding(.horizontal, 8)
-                                .opacity(0.4)
-                        }
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
             }
         }
     }

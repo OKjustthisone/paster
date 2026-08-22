@@ -9,6 +9,8 @@ public struct ClipboardItemRow: View {
     let onDelete: (ClipboardItem) -> Void
 
     @State private var isHovered = false
+    @State private var showPreviewPopover = false
+    @State private var hoverWorkItem: DispatchWorkItem?
 
     public init(
         item: ClipboardItem,
@@ -26,104 +28,76 @@ public struct ClipboardItemRow: View {
 
     public var body: some View {
         Button(action: {
+            cancelHoverTimer()
+            showPreviewPopover = false
             onSelect(item)
         }) {
-            HStack(alignment: .center, spacing: 10) {
-                // 左侧类型图标 / 颜色块 / 缩略图
+            HStack(alignment: .center, spacing: 8) {
+                // 1. 左侧紧凑图标 / 缩略图 (20x20)
                 leadingThumbnailOrIcon
+                    .frame(width: 22, height: 22)
 
-                // 中间主要内容与元信息
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(item.previewText)
-                        .font(.system(size: 12.5, weight: .regular))
-                        .lineLimit(2)
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    HStack(spacing: 6) {
-                        Text(item.timestamp.timeAgoDisplay())
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-
-                        if item.type != .text {
-                            Text(item.type.displayName)
-                                .font(.system(size: 9.5, weight: .medium))
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(badgeColor.opacity(0.15))
-                                .foregroundColor(badgeColor)
-                                .cornerRadius(4)
-                        }
-
-                        if item.characterCount > 0 && item.type == .text {
-                            Text("\(item.characterCount) 字符")
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary.opacity(0.8))
-                        }
-
-                        Spacer()
-                    }
-                }
+                // 2. 中间单行文本内容 (1行显示)
+                Text(item.previewText)
+                    .font(.system(size: 12, weight: .regular))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: 4)
 
-                // 右侧操作区与快捷键标记
-                HStack(spacing: 4) {
-                    if isHovered {
-                        // 收藏置顶按钮
-                        Button(action: { onTogglePin(item) }) {
-                            Image(systemName: item.isPinned ? "pin.fill" : "pin")
-                                .font(.system(size: 11))
-                                .foregroundColor(item.isPinned ? .orange : .secondary)
-                                .padding(4)
-                        }
-                        .buttonStyle(.plain)
-                        .help(item.isPinned ? "取消置顶" : "置顶收藏")
-
-                        // 删除按钮
-                        Button(action: { onDelete(item) }) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
-                                .padding(4)
-                        }
-                        .buttonStyle(.plain)
-                        .help("删除此项")
-                    } else {
-                        if item.isPinned {
-                            Image(systemName: "pin.fill")
-                                .font(.system(size: 10))
-                                .foregroundColor(.orange)
-                                .padding(.trailing, 2)
-                        } else if let idx = index, idx < 9 {
-                            Text("⌘\(idx + 1)")
-                                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                                .foregroundColor(.secondary.opacity(0.6))
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 2)
-                                .background(Color(NSColor.quaternaryLabelColor).opacity(0.2))
-                                .cornerRadius(3)
-                        }
-                    }
-                }
+                // 3. 右侧状态 / 快捷键 / 操作区
+                trailingAccessoryView
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isHovered ? Color.accentColor.opacity(0.1) : Color.clear)
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHovered ? Color.accentColor.opacity(0.12) : Color.clear)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .popover(isPresented: $showPreviewPopover, arrowEdge: .leading) {
+            ItemPreviewView(item: item)
+        }
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.1)) {
                 isHovered = hovering
             }
+            if hovering {
+                scheduleHoverPreview()
+            } else {
+                cancelHoverTimer()
+                showPreviewPopover = false
+            }
         }
     }
 
+    // MARK: - Hover Preview Timing
+    private func scheduleHoverPreview() {
+        cancelHoverTimer()
+        
+        // 当为图片或者长文本/代码时，悬停 0.35 秒自动浮现大图/全文预览
+        let shouldPreview = (item.type == .image) || (item.characterCount > 25) || (item.type == .code) || (item.type == .color)
+        guard shouldPreview else { return }
+
+        let workItem = DispatchWorkItem {
+            if self.isHovered {
+                self.showPreviewPopover = true
+            }
+        }
+        self.hoverWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
+    }
+
+    private func cancelHoverTimer() {
+        hoverWorkItem?.cancel()
+        hoverWorkItem = nil
+    }
+
+    // MARK: - Leading Icon / Thumbnail
     @ViewBuilder
     private var leadingThumbnailOrIcon: some View {
         switch item.type {
@@ -132,62 +106,103 @@ public struct ClipboardItemRow: View {
                 Image(nsImage: nsImage)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 36, height: 36)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .frame(width: 22, height: 22)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.secondary.opacity(0.2), lineWidth: 0.5)
                     )
             } else {
-                defaultIconView(icon: "photo", color: .purple)
+                compactIcon(icon: "photo", color: .purple)
             }
 
         case .color:
             if let color = item.textContent?.extractColor() {
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: 4)
                     .fill(Color(nsColor: color))
-                    .frame(width: 34, height: 34)
+                    .frame(width: 20, height: 20)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.secondary.opacity(0.25), lineWidth: 0.5)
                     )
             } else {
-                defaultIconView(icon: "paintpalette", color: .pink)
+                compactIcon(icon: "paintpalette", color: .pink)
             }
 
         case .code:
-            defaultIconView(icon: "curlybraces", color: .indigo)
+            compactIcon(icon: "chevron.left.forwardslash.chevron.right", color: .indigo)
 
         case .link:
-            defaultIconView(icon: "link", color: .blue)
+            compactIcon(icon: "link", color: .blue)
 
         case .file:
-            defaultIconView(icon: "folder", color: .orange)
+            compactIcon(icon: "folder", color: .orange)
 
         case .text:
-            defaultIconView(icon: "doc.text", color: .secondary)
+            compactIcon(icon: "doc.text", color: .secondary)
         }
     }
 
-    private func defaultIconView(icon: String, color: Color) -> some View {
+    private func compactIcon(icon: String, color: Color) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: 4)
                 .fill(color.opacity(0.12))
-                .frame(width: 32, height: 32)
+                .frame(width: 20, height: 20)
             Image(systemName: icon)
-                .font(.system(size: 14))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundColor(color)
         }
     }
 
-    private var badgeColor: Color {
-        switch item.type {
-        case .image: return .purple
-        case .color: return .pink
-        case .code: return .indigo
-        case .link: return .blue
-        case .file: return .orange
-        case .text: return .secondary
+    // MARK: - Trailing Accessory View
+    @ViewBuilder
+    private var trailingAccessoryView: some View {
+        HStack(spacing: 4) {
+            if isHovered {
+                // 收藏置顶按钮
+                Button(action: { onTogglePin(item) }) {
+                    Image(systemName: item.isPinned ? "pin.fill" : "pin")
+                        .font(.system(size: 10))
+                        .foregroundColor(item.isPinned ? .orange : .secondary)
+                        .padding(3)
+                }
+                .buttonStyle(.plain)
+                .help(item.isPinned ? "取消置顶" : "置顶收藏")
+
+                // 删除按钮
+                Button(action: {
+                    cancelHoverTimer()
+                    showPreviewPopover = false
+                    onDelete(item)
+                }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .padding(3)
+                }
+                .buttonStyle(.plain)
+                .help("删除此项")
+            } else {
+                // 时间显示
+                Text(item.timestamp.timeAgoDisplay())
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary.opacity(0.8))
+
+                if item.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 9))
+                        .foregroundColor(.orange)
+                        .padding(.trailing, 1)
+                } else if let idx = index, idx < 9 {
+                    Text("⌘\(idx + 1)")
+                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                        .foregroundColor(.secondary.opacity(0.5))
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 1)
+                        .background(Color(NSColor.quaternaryLabelColor).opacity(0.2))
+                        .cornerRadius(3)
+                }
+            }
         }
     }
 }
