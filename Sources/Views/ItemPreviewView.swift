@@ -80,9 +80,8 @@ public struct ItemPreviewView: View {
                         .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
                 )
                 .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-        } else if let thumbData = item.thumbnailData,
-                  let nsImage = NSImage(data: thumbData) {
-            Image(nsImage: nsImage)
+        } else if let thumb = item.thumbnailImage {
+            Image(nsImage: thumb)
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: 290, maxHeight: 260)

@@ -29,9 +29,8 @@ public final class PasteService {
                let imageData = StorageService.shared.loadImage(fileName: fileName),
                let image = NSImage(data: imageData) {
                 pasteboard.writeObjects([image])
-            } else if let thumbData = item.thumbnailData,
-                      let image = NSImage(data: thumbData) {
-                pasteboard.writeObjects([image])
+            } else if let thumb = item.thumbnailImage {
+                pasteboard.writeObjects([thumb])
             }
         case .file:
             if let path = item.textContent {

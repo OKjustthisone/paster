@@ -41,17 +41,19 @@ public final class ClipboardMonitor: ObservableObject {
 
     // MARK: - Check Pasteboard
     private func checkPasteboard() {
-        let currentCount = pasteboard.changeCount
-        guard currentCount != lastChangeCount else { return }
-        
-        lastChangeCount = currentCount
+        autoreleasepool {
+            let currentCount = pasteboard.changeCount
+            guard currentCount != lastChangeCount else { return }
+            
+            lastChangeCount = currentCount
 
-        if ignoreNextCount {
-            ignoreNextCount = false
-            return
+            if ignoreNextCount {
+                ignoreNextCount = false
+                return
+            }
+
+            processPasteboardContent()
         }
-
-        processPasteboardContent()
     }
 
     private func processPasteboardContent() {
@@ -90,13 +92,18 @@ public final class ClipboardMonitor: ObservableObject {
     // MARK: - Handlers
     private func handleNewImage(_ image: NSImage) {
         let id = UUID()
-        let thumbnail = image.resizedThumbnail(maxDimension: 160)
+        let thumbnail = image.resizedThumbnail(maxDimension: 80)
         let thumbData = thumbnail.pngData()
         let fullData = image.pngData() ?? image.tiffRepresentation
 
         var imageFileName: String? = nil
+        var thumbnailFileName: String? = nil
+
         if let data = fullData {
             imageFileName = StorageService.shared.saveImage(data: data, id: id)
+        }
+        if let tData = thumbData {
+            thumbnailFileName = StorageService.shared.saveThumbnail(data: tData, id: id)
         }
 
         let dimensions = "\(Int(image.size.width)) × \(Int(image.size.height))"
@@ -113,7 +120,7 @@ public final class ClipboardMonitor: ObservableObject {
             type: .image,
             textContent: nil,
             imageFileName: imageFileName,
-            thumbnailData: thumbData,
+            thumbnailFileName: thumbnailFileName,
             timestamp: Date(),
             isPinned: false,
             characterCount: 0,
@@ -153,7 +160,7 @@ public final class ClipboardMonitor: ObservableObject {
             type: type,
             textContent: text,
             imageFileName: nil,
-            thumbnailData: nil,
+            thumbnailFileName: nil,
             timestamp: Date(),
             isPinned: false,
             characterCount: text.count,

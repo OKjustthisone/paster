@@ -7,6 +7,8 @@ public struct PopoverContentView: View {
     @State private var searchText: String = ""
     @State private var selectedCategory: FilterCategory = .all
     @State private var showSettings: Bool = false
+    @State private var previewItem: ClipboardItem? = nil
+    @State private var hoverWorkItem: DispatchWorkItem? = nil
     @AppStorage("autoPasteEnabled") private var autoPasteEnabled: Bool = true
 
     public init() {}
@@ -69,6 +71,9 @@ public struct PopoverContentView: View {
         }
         .frame(width: 360, height: 480)
         .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
+        .popover(item: $previewItem, arrowEdge: .leading) { item in
+            ItemPreviewView(item: item)
+        }
         .sheet(isPresented: $showSettings) {
             SettingsSheetView()
         }
@@ -96,7 +101,10 @@ public struct PopoverContentView: View {
             Spacer()
 
             // 设置按钮
-            Button(action: { showSettings = true }) {
+            Button(action: {
+                clearHover()
+                showSettings = true
+            }) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
@@ -129,13 +137,18 @@ public struct PopoverContentView: View {
                             item: item,
                             index: index < 9 ? index : nil,
                             onSelect: { selected in
+                                clearHover()
                                 selectItem(selected)
                             },
                             onTogglePin: { pinned in
                                 monitor.togglePin(pinned)
                             },
                             onDelete: { deleted in
+                                clearHover()
                                 monitor.deleteItem(deleted)
+                            },
+                            onHoverChange: { hoveredItem, isHovered in
+                                handleRowHover(item: hoveredItem, isHovered: isHovered)
                             }
                         )
                         .id(item.id)
@@ -145,6 +158,36 @@ public struct PopoverContentView: View {
                 .padding(.vertical, 4)
             }
         }
+    }
+
+    // MARK: - Hover Handlers (Single Shared Popover)
+    private func handleRowHover(item: ClipboardItem, isHovered: Bool) {
+        if isHovered {
+            hoverWorkItem?.cancel()
+            let shouldPreview = (item.type == .image) || (item.characterCount > 25) || (item.type == .code) || (item.type == .color)
+            guard shouldPreview else {
+                previewItem = nil
+                return
+            }
+
+            let workItem = DispatchWorkItem {
+                self.previewItem = item
+            }
+            self.hoverWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
+        } else {
+            hoverWorkItem?.cancel()
+            hoverWorkItem = nil
+            if previewItem?.id == item.id {
+                previewItem = nil
+            }
+        }
+    }
+
+    private func clearHover() {
+        hoverWorkItem?.cancel()
+        hoverWorkItem = nil
+        previewItem = nil
     }
 
     // MARK: - Empty State
@@ -177,6 +220,7 @@ public struct PopoverContentView: View {
 
             if !monitor.items.isEmpty {
                 Button(action: {
+                    clearHover()
                     monitor.clearAll(preservePinned: true)
                 }) {
                     Text("清空未置顶")

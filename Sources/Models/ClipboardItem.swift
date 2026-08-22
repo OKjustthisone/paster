@@ -6,7 +6,7 @@ public struct ClipboardItem: Identifiable, Codable, Equatable, Hashable {
     public var type: ItemType
     public var textContent: String?
     public var imageFileName: String?
-    public var thumbnailData: Data?
+    public var thumbnailFileName: String?
     public var timestamp: Date
     public var isPinned: Bool
     public var characterCount: Int
@@ -18,7 +18,7 @@ public struct ClipboardItem: Identifiable, Codable, Equatable, Hashable {
         type: ItemType,
         textContent: String? = nil,
         imageFileName: String? = nil,
-        thumbnailData: Data? = nil,
+        thumbnailFileName: String? = nil,
         timestamp: Date = Date(),
         isPinned: Bool = false,
         characterCount: Int = 0,
@@ -29,12 +29,17 @@ public struct ClipboardItem: Identifiable, Codable, Equatable, Hashable {
         self.type = type
         self.textContent = textContent
         self.imageFileName = imageFileName
-        self.thumbnailData = thumbnailData
+        self.thumbnailFileName = thumbnailFileName
         self.timestamp = timestamp
         self.isPinned = isPinned
         self.characterCount = characterCount
         self.imageDimensions = imageDimensions
         self.contentHash = contentHash
+    }
+
+    public var thumbnailImage: NSImage? {
+        guard let name = thumbnailFileName else { return nil }
+        return StorageService.shared.loadThumbnailImage(fileName: name)
     }
 
     public var previewText: String {

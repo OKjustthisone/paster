@@ -7,29 +7,28 @@ public struct ClipboardItemRow: View {
     let onSelect: (ClipboardItem) -> Void
     let onTogglePin: (ClipboardItem) -> Void
     let onDelete: (ClipboardItem) -> Void
+    let onHoverChange: (ClipboardItem, Bool) -> Void
 
     @State private var isHovered = false
-    @State private var showPreviewPopover = false
-    @State private var hoverWorkItem: DispatchWorkItem?
 
     public init(
         item: ClipboardItem,
         index: Int? = nil,
         onSelect: @escaping (ClipboardItem) -> Void,
         onTogglePin: @escaping (ClipboardItem) -> Void,
-        onDelete: @escaping (ClipboardItem) -> Void
+        onDelete: @escaping (ClipboardItem) -> Void,
+        onHoverChange: @escaping (ClipboardItem, Bool) -> Void
     ) {
         self.item = item
         self.index = index
         self.onSelect = onSelect
         self.onTogglePin = onTogglePin
         self.onDelete = onDelete
+        self.onHoverChange = onHoverChange
     }
 
     public var body: some View {
         Button(action: {
-            cancelHoverTimer()
-            showPreviewPopover = false
             onSelect(item)
         }) {
             HStack(alignment: .center, spacing: 8) {
@@ -59,42 +58,12 @@ public struct ClipboardItemRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $showPreviewPopover, arrowEdge: .leading) {
-            ItemPreviewView(item: item)
-        }
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.1)) {
                 isHovered = hovering
             }
-            if hovering {
-                scheduleHoverPreview()
-            } else {
-                cancelHoverTimer()
-                showPreviewPopover = false
-            }
+            onHoverChange(item, hovering)
         }
-    }
-
-    // MARK: - Hover Preview Timing
-    private func scheduleHoverPreview() {
-        cancelHoverTimer()
-        
-        // 当为图片或者长文本/代码时，悬停 0.35 秒自动浮现大图/全文预览
-        let shouldPreview = (item.type == .image) || (item.characterCount > 25) || (item.type == .code) || (item.type == .color)
-        guard shouldPreview else { return }
-
-        let workItem = DispatchWorkItem {
-            if self.isHovered {
-                self.showPreviewPopover = true
-            }
-        }
-        self.hoverWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
-    }
-
-    private func cancelHoverTimer() {
-        hoverWorkItem?.cancel()
-        hoverWorkItem = nil
     }
 
     // MARK: - Leading Icon / Thumbnail
@@ -102,8 +71,8 @@ public struct ClipboardItemRow: View {
     private var leadingThumbnailOrIcon: some View {
         switch item.type {
         case .image:
-            if let thumbData = item.thumbnailData, let nsImage = NSImage(data: thumbData) {
-                Image(nsImage: nsImage)
+            if let thumb = item.thumbnailImage {
+                Image(nsImage: thumb)
                     .resizable()
                     .scaledToFill()
                     .frame(width: 22, height: 22)
@@ -171,8 +140,6 @@ public struct ClipboardItemRow: View {
 
                 // 删除按钮
                 Button(action: {
-                    cancelHoverTimer()
-                    showPreviewPopover = false
                     onDelete(item)
                 }) {
                     Image(systemName: "trash")
