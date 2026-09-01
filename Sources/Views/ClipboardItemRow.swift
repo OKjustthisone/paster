@@ -4,6 +4,7 @@ import SwiftUI
 public struct ClipboardItemRow: View {
     let item: ClipboardItem
     let index: Int?
+    let isSelected: Bool
     let onSelect: (ClipboardItem) -> Void
     let onTogglePin: (ClipboardItem) -> Void
     let onDelete: (ClipboardItem) -> Void
@@ -14,6 +15,7 @@ public struct ClipboardItemRow: View {
     public init(
         item: ClipboardItem,
         index: Int? = nil,
+        isSelected: Bool = false,
         onSelect: @escaping (ClipboardItem) -> Void,
         onTogglePin: @escaping (ClipboardItem) -> Void,
         onDelete: @escaping (ClipboardItem) -> Void,
@@ -21,6 +23,7 @@ public struct ClipboardItemRow: View {
     ) {
         self.item = item
         self.index = index
+        self.isSelected = isSelected
         self.onSelect = onSelect
         self.onTogglePin = onTogglePin
         self.onDelete = onDelete
@@ -38,10 +41,10 @@ public struct ClipboardItemRow: View {
 
                 // 2. 中间单行文本内容 (1行显示)
                 Text(item.previewText)
-                    .font(.system(size: 12, weight: .regular))
+                    .font(.system(size: 12, weight: isSelected ? .medium : .regular))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .foregroundColor(.primary)
+                    .foregroundColor(isSelected ? .accentColor : .primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: 4)
@@ -53,7 +56,11 @@ public struct ClipboardItemRow: View {
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(isHovered ? Color.accentColor.opacity(0.12) : Color.clear)
+                    .fill(isHovered || isSelected ? Color.accentColor.opacity(0.14) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isSelected ? Color.accentColor.opacity(0.4) : Color.clear, lineWidth: 1)
             )
             .contentShape(Rectangle())
         }
@@ -163,10 +170,14 @@ public struct ClipboardItemRow: View {
                 } else if let idx = index, idx < 9 {
                     Text("⌘\(idx + 1)")
                         .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                        .foregroundColor(.secondary.opacity(0.5))
+                        .foregroundColor(isSelected ? .accentColor : .secondary.opacity(0.6))
                         .padding(.horizontal, 3)
                         .padding(.vertical, 1)
-                        .background(Color(NSColor.quaternaryLabelColor).opacity(0.2))
+                        .background(
+                            isSelected
+                            ? Color.accentColor.opacity(0.18)
+                            : Color(NSColor.quaternaryLabelColor).opacity(0.2)
+                        )
                         .cornerRadius(3)
                 }
             }

@@ -9,6 +9,8 @@ public struct PopoverContentView: View {
     @State private var showSettings: Bool = false
     @State private var previewItem: ClipboardItem? = nil
     @State private var hoverWorkItem: DispatchWorkItem? = nil
+    @State private var selectedIndex: Int = 0
+    @State private var localKeyMonitor: Any? = nil
     @AppStorage("autoPasteEnabled") private var autoPasteEnabled: Bool = true
 
     public init() {}
@@ -77,6 +79,17 @@ public struct PopoverContentView: View {
         .sheet(isPresented: $showSettings) {
             SettingsSheetView()
         }
+        .onAppear {
+            setupKeyboardMonitor()
+        }
+        .onDisappear {
+            removeKeyboardMonitor()
+        }
+        .onChange(of: filteredItems) { items in
+            if selectedIndex >= items.count {
+                selectedIndex = max(0, items.count - 1)
+            }
+        }
     }
 
     // MARK: - Header
@@ -111,7 +124,7 @@ public struct PopoverContentView: View {
                     .padding(4)
             }
             .buttonStyle(.plain)
-            .help("偏好设置")
+            .help("偏好设置与快捷键")
 
             // 退出按钮
             Button(action: { NSApplication.shared.terminate(nil) }) {
@@ -136,6 +149,7 @@ public struct PopoverContentView: View {
                         ClipboardItemRow(
                             item: item,
                             index: index < 9 ? index : nil,
+                            isSelected: index == selectedIndex,
                             onSelect: { selected in
                                 clearHover()
                                 selectItem(selected)
@@ -157,6 +171,84 @@ public struct PopoverContentView: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
             }
+            .onChange(of: selectedIndex) { newIndex in
+                if newIndex < filteredItems.count {
+                    withAnimation {
+                        proxy.scrollTo(filteredItems[newIndex].id, anchor: .center)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Local Keyboard Shortcuts
+    private func setupKeyboardMonitor() {
+        removeKeyboardMonitor()
+
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // 1. ESC 键关闭面板
+            if event.keyCode == 53 { // kVK_Escape
+                clearHover()
+                AppDelegate.shared?.closePopover()
+                return nil
+            }
+
+            // 2. ⌘ + 1 ~ 9 快速选择前9项
+            if event.modifierFlags.contains(.command),
+               let chars = event.charactersIgnoringModifiers,
+               let firstChar = chars.first,
+               let num = Int(String(firstChar)), num >= 1 && num <= 9 {
+                let targetIndex = num - 1
+                if targetIndex < filteredItems.count {
+                    clearHover()
+                    selectItem(filteredItems[targetIndex])
+                    return nil
+                }
+            }
+
+            // 3. 方向下键 (Down Arrow)
+            if event.keyCode == 125 {
+                if !filteredItems.isEmpty {
+                    selectedIndex = min(filteredItems.count - 1, selectedIndex + 1)
+                }
+                return nil
+            }
+
+            // 4. 方向上键 (Up Arrow)
+            if event.keyCode == 126 {
+                if !filteredItems.isEmpty {
+                    selectedIndex = max(0, selectedIndex - 1)
+                }
+                return nil
+            }
+
+            // 5. 回车键 (Return / Enter) 选中并粘贴
+            if event.keyCode == 36 || event.keyCode == 76 {
+                if selectedIndex >= 0 && selectedIndex < filteredItems.count {
+                    clearHover()
+                    selectItem(filteredItems[selectedIndex])
+                    return nil
+                }
+            }
+
+            // 6. Delete / Backspace 键 (⌘ + Backspace 删除当前选中项)
+            if event.keyCode == 51 && event.modifierFlags.contains(.command) {
+                if selectedIndex >= 0 && selectedIndex < filteredItems.count {
+                    let itemToDelete = filteredItems[selectedIndex]
+                    clearHover()
+                    monitor.deleteItem(itemToDelete)
+                    return nil
+                }
+            }
+
+            return event
+        }
+    }
+
+    private func removeKeyboardMonitor() {
+        if let monitor = localKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            localKeyMonitor = nil
         }
     }
 

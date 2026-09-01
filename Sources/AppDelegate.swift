@@ -2,11 +2,15 @@ import AppKit
 import SwiftUI
 
 public final class AppDelegate: NSObject, NSApplicationDelegate {
+    public static private(set) var shared: AppDelegate?
+
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private var eventMonitor: Any?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        AppDelegate.shared = self
+
         // 1. 初始化 AppTracker 与 ClipboardMonitor
         _ = AppTracker.shared
         ClipboardMonitor.shared.startMonitoring()
@@ -20,7 +24,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // 4. 监听外部点击自动隐藏 Popover
         setupEventMonitor()
 
-        // 5. 绑定 PasteService 关闭回调
+        // 5. 初始化全局快捷键 (Carbon HotKey)
+        setupHotKey()
+
+        // 6. 绑定 PasteService 关闭回调
         PasteService.shared.onDismissPopover = { [weak self] in
             self?.closePopover()
         }
@@ -55,7 +62,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func togglePopover(_ sender: AnyObject?) {
+    private func setupHotKey() {
+        HotKeyManager.shared.onHotKeyPressed = { [weak self] in
+            self?.togglePopover(nil)
+        }
+        HotKeyManager.shared.setup()
+    }
+
+    @objc public func togglePopover(_ sender: AnyObject?) {
         guard let button = statusItem.button else { return }
 
         if popover.isShown {
@@ -70,7 +84,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func closePopover() {
+    public func closePopover() {
         popover.performClose(nil)
     }
 
